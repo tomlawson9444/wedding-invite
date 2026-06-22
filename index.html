@@ -25,16 +25,18 @@
     const EMAILJS_TEMPLATE_ID = "template_003uk4r";
     emailjs.init(EMAILJS_PUBLIC_KEY);
 
+    const FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
+    const supabaseHeaders = {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+    };
+
     const db = {
       insert: async (data) => {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/RSVP`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Prefer": "return=minimal",
-          },
+          headers: { ...supabaseHeaders, "Prefer": "return=minimal" },
           body: JSON.stringify(data),
         });
         if (!res.ok) {
@@ -42,18 +44,30 @@
           throw new Error(msg);
         }
       },
-      getAll: async () => {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/RSVP?select=*&order=created_at.desc`, {
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-          },
+      // Code lookup and admin RSVP reads happen server-side in Edge Functions
+      // (using the service role key) so the anon key can never list codes or
+      // dump the RSVP table directly via the REST API.
+      validateCode: async (code) => {
+        const res = await fetch(`${FUNCTIONS_URL}/validate-code`, {
+          method: "POST",
+          headers: supabaseHeaders,
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) return { valid: false };
+        return res.json();
+      },
+      getAllAsAdmin: async (code) => {
+        const res = await fetch(`${FUNCTIONS_URL}/admin-rsvps`, {
+          method: "POST",
+          headers: supabaseHeaders,
+          body: JSON.stringify({ code }),
         });
         if (!res.ok) {
           const msg = await res.text();
           throw new Error(msg);
         }
-        return res.json();
+        const { rsvps } = await res.json();
+        return rsvps;
       },
     };
 
@@ -192,25 +206,7 @@
       const [rsvps, setRsvps]         = useState([]);
       const [adminLoading, setAdminLoading] = useState(false);
       const [dbError, setDbError]     = useState("");
-      const [CODES, setCODES]         = useState({});
-      const [codesLoaded, setCodesLoaded] = useState(false);
-
-      useEffect(() => {
-        fetch(`${SUPABASE_URL}/rest/v1/codes?select=code,type`, {
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-          }
-        })
-        .then(res => res.json())
-        .then(data => {
-          const map = {};
-          data.forEach(row => { map[row.code.trim().toUpperCase()] = row.type; });
-          setCODES(map);
-          setCodesLoaded(true);
-        })
-        .catch(() => setCodesLoaded(true));
-      }, []);
+      const [checkingCode, setCheckingCode] = useState(false);
 
       useEffect(() => {
         const t = setTimeout(() => setVisible(true), 80);
@@ -222,24 +218,29 @@
         setTimeout(() => { setScreen(next); setDbError(""); }, 200);
       };
 
-      const handleLogin = () => {
-        if (!codesLoaded) return;
-        const key = code.trim().toUpperCase().replace(/\s+/g, "");
-        const type = CODES[key];
-        if (type) {
-          setGuestType(type);
-          setLoginError("");
-          if (type === "admin") loadRsvps();
-          go(type === "admin" ? "admin" : "invitation");
-        } else {
-          setLoginError("That code doesn't seem right — please check your invitation.");
+      const handleLogin = async () => {
+        if (checkingCode || !code.trim()) return;
+        setCheckingCode(true);
+        setLoginError("");
+        try {
+          const { valid, type } = await db.validateCode(code);
+          if (valid) {
+            setGuestType(type);
+            if (type === "admin") loadRsvps();
+            go(type === "admin" ? "admin" : "invitation");
+          } else {
+            setLoginError("That code doesn't seem right — please check your invitation.");
+          }
+        } catch (e) {
+          setLoginError("Couldn't reach the server — please try again.");
         }
+        setCheckingCode(false);
       };
 
       const loadRsvps = async () => {
         setAdminLoading(true);
         try {
-          const data = await db.getAll();
+          const data = await db.getAllAsAdmin(code);
           setRsvps(data);
         } catch (e) {
           setDbError("Could not load RSVPs. Check your Supabase table is set up correctly.");
@@ -333,7 +334,7 @@
                 value={code} onChange={e => setCode(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleLogin()}/>
               {loginError && <p className="error-msg">{loginError}</p>}
-              <button className="btn" onClick={handleLogin} disabled={!codesLoaded}>{codesLoaded ? "Continue" : "Loading…"}</button>
+              <button className="btn" onClick={handleLogin} disabled={checkingCode}>{checkingCode ? "Checking…" : "Continue"}</button>
             </div>
           </div>
         </React.Fragment>
