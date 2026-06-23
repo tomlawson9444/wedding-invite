@@ -219,14 +219,16 @@
       };
 
       const handleLogin = async () => {
-        if (checkingCode || !code.trim()) return;
+        const trimmedCode = code.trim();
+        if (checkingCode || !trimmedCode) return;
         setCheckingCode(true);
         setLoginError("");
         try {
-          const { valid, type } = await db.validateCode(code);
+          const { valid, type } = await db.validateCode(trimmedCode);
           if (valid) {
+            setCode(trimmedCode);
             setGuestType(type);
-            if (type === "admin") loadRsvps();
+            if (type === "admin") loadRsvps(trimmedCode);
             go(type === "admin" ? "admin" : "invitation");
           } else {
             setLoginError("That code doesn't seem right — please check your invitation.");
@@ -237,10 +239,10 @@
         setCheckingCode(false);
       };
 
-      const loadRsvps = async () => {
+      const loadRsvps = async (codeOverride) => {
         setAdminLoading(true);
         try {
-          const data = await db.getAllAsAdmin(code);
+          const data = await db.getAllAsAdmin(codeOverride || code);
           setRsvps(data);
         } catch (e) {
           setDbError("Could not load RSVPs. Check your Supabase table is set up correctly.");
