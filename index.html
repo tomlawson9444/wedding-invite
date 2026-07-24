@@ -249,10 +249,10 @@
         setAdminLoading(false);
       };
 
-      const downloadCSV = () => {
-        if (rsvps.length === 0) return;
+      const downloadCSV = (list) => {
+        if (list.length === 0) return;
         const headers = ["Name", "Guest Type", "Attending", "Song Request", "Dietary Requirements", "Message", "Submitted At"];
-        const rows = rsvps.map(r => [
+        const rows = list.map(r => [
           r.name || "",
           r.guest_type === "fullday" ? "Full Day" : "Evening",
           r.attending ? "Yes" : "No",
@@ -555,7 +555,7 @@
                     <button onClick={loadRsvps} style={{background:"none",border:"1px solid var(--border)",padding:"6px 14px",cursor:"pointer",fontFamily:"'Jost',sans-serif",fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:"var(--text-muted)"}}>
                       Refresh
                     </button>
-                    <button onClick={downloadCSV} disabled={rsvps.length === 0} style={{background:"var(--blue-dark)",border:"1px solid var(--blue-dark)",padding:"6px 14px",cursor:rsvps.length===0?"not-allowed":"pointer",fontFamily:"'Jost',sans-serif",fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:"#fff",opacity:rsvps.length===0?0.4:1}}>
+                    <button onClick={() => downloadCSV(filteredRsvps)} disabled={filteredRsvps.length === 0} style={{background:"var(--blue-dark)",border:"1px solid var(--blue-dark)",padding:"6px 14px",cursor:filteredRsvps.length===0?"not-allowed":"pointer",fontFamily:"'Jost',sans-serif",fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:"#fff",opacity:filteredRsvps.length===0?0.4:1}}>
                       Download CSV
                     </button>
                   </div>
