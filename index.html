@@ -415,7 +415,7 @@
                   <p className="detail-note" style={{marginTop:4}}>Please no black suits or dusty blue dresses</p>
                 </div>
 
-                <div className="detail-block" style={{borderBottom:"none"}}>
+                <div className="detail-block">
                   <span className="label-sm">Parking</span>
                   <p className="detail-time" style={{fontSize:16,marginTop:4}}>Free Parking On Site</p>
                   <p className="detail-note" style={{marginTop:4}}>Greenhill Hotel, Red Dial, Wigton CA7 8LS</p>
@@ -428,6 +428,12 @@
                   >
                     Open in Google Maps →
                   </a>
+                </div>
+                <div className="detail-block" style={{borderBottom:"none"}}>
+                  <span className="label-sm">Bus Transport</span>
+                  <p className="detail-time" style={{fontSize:16,marginTop:4}}>{isFull ? "1:15 PM" : "4:30 PM"} from The Halston</p>
+                  <p className="detail-note" style={{marginTop:4}}>If you're not driving yourself to the venue</p>
+                  <p className="detail-note" style={{marginTop:2}}>The bus to pick you back up will be leaving at midnight</p>
                 </div>
                 <div style={{height:30}}/>
                 <button className="btn" onClick={() => go("rsvp")}>RSVP</button>
