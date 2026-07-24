@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>body,html{margin:0;padding:0;background:#edf3f7;} .leaflet-container{border-radius:0;} </style>
@@ -249,10 +250,10 @@
         setAdminLoading(false);
       };
 
-      const downloadCSV = (list) => {
+      const downloadWorkbook = (list) => {
         if (list.length === 0) return;
-        const headers = ["Name", "Guest Type", "Attending", "Partner Name", "Song Request", "Dietary Requirements", "Message", "Submitted At"];
-        const rows = list.map(r => [
+        const rsvpHeaders = ["Name", "Guest Type", "Attending", "Partner Name", "Song Request", "Dietary Requirements", "Message", "Submitted At"];
+        const rsvpRows = list.map(r => [
           r.name || "",
           r.guest_type === "fullday" ? "Full Day" : "Evening",
           r.attending ? "Yes" : "No",
@@ -262,16 +263,18 @@
           r.message || "",
           r.created_at ? new Date(r.created_at).toLocaleString("en-GB") : "",
         ]);
-        const csvContent = [headers, ...rows]
-          .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-          .join("\n");
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "TomAndMegan_RSVPs.csv";
-        link.click();
-        URL.revokeObjectURL(url);
+
+        const guestListRows = [];
+        rsvps.filter(r => r.attending === true).forEach(r => {
+          const type = r.guest_type === "fullday" ? "Full Day" : "Evening";
+          guestListRows.push([r.name || "", type]);
+          if (r.partner_name) guestListRows.push([r.partner_name, type]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([rsvpHeaders, ...rsvpRows]), "RSVPs");
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Guest Name", "Type"], ...guestListRows]), "Guest List");
+        XLSX.writeFile(wb, "TomAndMegan_RSVPs.xlsx");
       };
 
       const handleSubmit = async () => {
@@ -581,8 +584,8 @@
                     <button onClick={loadRsvps} style={{background:"none",border:"1px solid var(--border)",padding:"6px 14px",cursor:"pointer",fontFamily:"'Jost',sans-serif",fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:"var(--text-muted)"}}>
                       Refresh
                     </button>
-                    <button onClick={() => downloadCSV(filteredRsvps)} disabled={filteredRsvps.length === 0} style={{background:"var(--blue-dark)",border:"1px solid var(--blue-dark)",padding:"6px 14px",cursor:filteredRsvps.length===0?"not-allowed":"pointer",fontFamily:"'Jost',sans-serif",fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:"#fff",opacity:filteredRsvps.length===0?0.4:1}}>
-                      Download CSV
+                    <button onClick={() => downloadWorkbook(filteredRsvps)} disabled={filteredRsvps.length === 0} style={{background:"var(--blue-dark)",border:"1px solid var(--blue-dark)",padding:"6px 14px",cursor:filteredRsvps.length===0?"not-allowed":"pointer",fontFamily:"'Jost',sans-serif",fontSize:9,letterSpacing:"0.15em",textTransform:"uppercase",color:"#fff",opacity:filteredRsvps.length===0?0.4:1}}>
+                      Download Excel
                     </button>
                   </div>
                 </div>
