@@ -200,7 +200,7 @@
       const [guestType, setGuestType] = useState(null);
       const [code, setCode]           = useState("");
       const [loginError, setLoginError] = useState("");
-      const [form, setForm]           = useState({ name:"", attending:null, song:"", dietary:"", message:"" });
+      const [form, setForm]           = useState({ name:"", attending:null, song:"", dietary:"", message:"", partner:false, partnerName:"" });
       const [loading, setLoading]     = useState(false);
       const [visible, setVisible]     = useState(false);
       const [rsvps, setRsvps]         = useState([]);
@@ -251,11 +251,12 @@
 
       const downloadCSV = (list) => {
         if (list.length === 0) return;
-        const headers = ["Name", "Guest Type", "Attending", "Song Request", "Dietary Requirements", "Message", "Submitted At"];
+        const headers = ["Name", "Guest Type", "Attending", "Partner Name", "Song Request", "Dietary Requirements", "Message", "Submitted At"];
         const rows = list.map(r => [
           r.name || "",
           r.guest_type === "fullday" ? "Full Day" : "Evening",
           r.attending ? "Yes" : "No",
+          r.partner_name || "",
           r.song || "",
           r.dietary || "",
           r.message || "",
@@ -276,6 +277,7 @@
       const handleSubmit = async () => {
         if (!form.name.trim() || form.attending === null || !form.song.trim()) return;
         if (form.attending && !form.dietary.trim()) return;
+        if (form.attending && form.partner && !form.partnerName.trim()) return;
         setLoading(true);
         setDbError("");
         try {
@@ -287,6 +289,7 @@
             song: form.song,
             dietary: form.dietary || null,
             message: form.message || null,
+            partner_name: form.attending && form.partner ? form.partnerName.trim() : null,
           });
 
           // 2 — Send email notification
@@ -298,6 +301,7 @@
               song:        form.song     || "Not provided",
               dietary:     form.dietary  || "None",
               message:     form.message  || "No message left",
+              partner_name: form.attending && form.partner ? form.partnerName.trim() : "Not bringing a partner",
             });
           } catch (emailErr) {
             console.warn("Email notification failed:", emailErr);
@@ -436,7 +440,7 @@
         const attending = form.attending === true;
         const declining = form.attending === false;
         const valid = form.name.trim() && form.attending !== null && form.song.trim() &&
-          (declining || (attending && form.dietary.trim()));
+          (declining || (attending && form.dietary.trim() && (!form.partner || form.partnerName.trim())));
         return (
           <React.Fragment>
             <style>{css}</style>
@@ -476,6 +480,24 @@
                         <label className="form-label">Dietary requirements <span style={{color:"var(--blue)"}}>*</span></label>
                         <input className="form-input" placeholder="Allergies, intolerances, or write 'None'"
                           value={form.dietary} onChange={e => setForm({...form, dietary:e.target.value})}/>
+                      </div>
+                    )}
+                    {attending && (
+                      <div className="form-group">
+                        <label className="form-label">Bringing a partner?</label>
+                        <div className="toggle-row">
+                          <button className={`toggle-btn ${form.partner ? "on" : ""}`}
+                            onClick={() => setForm({...form, partner:!form.partner, partnerName: form.partner ? "" : form.partnerName})}>
+                            {form.partner ? "✓ Bringing a partner" : "+ Bring a partner?"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {attending && form.partner && (
+                      <div className="form-group">
+                        <label className="form-label">Partner's Full Name <span style={{color:"var(--blue)"}}>*</span></label>
+                        <input className="form-input" placeholder="e.g. John Smith"
+                          value={form.partnerName} onChange={e => setForm({...form, partnerName:e.target.value})}/>
                       </div>
                     )}
                     <div className="form-group">
@@ -535,6 +557,10 @@
         const declining = rsvps.filter(r => r.attending === false);
         const fullDay   = attending.filter(r => r.guest_type === "fullday");
         const evening   = attending.filter(r => r.guest_type === "evening");
+        const headcount = (rows) => rows.reduce((sum, r) => sum + 1 + (r.partner_name ? 1 : 0), 0);
+        const attendingHeads = headcount(attending);
+        const fullDayHeads   = headcount(fullDay);
+        const eveningHeads   = headcount(evening);
         const filteredRsvps = typeFilter === "all" ? rsvps : rsvps.filter(r => r.guest_type === typeFilter);
         const emptyMessage = typeFilter === "fullday" ? "No Full Day guests yet"
           : typeFilter === "evening" ? "No Evening guests yet"
@@ -567,9 +593,9 @@
                   <React.Fragment>
                     <div className="stat-row">
                       <div className="stat-box"><span className="stat-num">{rsvps.length}</span><span className="label-sm">Total</span></div>
-                      <div className="stat-box"><span className="stat-num">{attending.length}</span><span className="label-sm">Attending</span></div>
-                      <div className="stat-box"><span className="stat-num">{fullDay.length}</span><span className="label-sm">Full Day</span></div>
-                      <div className="stat-box"><span className="stat-num">{evening.length}</span><span className="label-sm">Evening</span></div>
+                      <div className="stat-box"><span className="stat-num">{attendingHeads}</span><span className="label-sm">Attending</span><span style={{display:"block",fontSize:9,color:"var(--text-muted)",marginTop:4}}>{attending.length} RSVPs</span></div>
+                      <div className="stat-box"><span className="stat-num">{fullDayHeads}</span><span className="label-sm">Full Day</span><span style={{display:"block",fontSize:9,color:"var(--text-muted)",marginTop:4}}>{fullDay.length} RSVPs</span></div>
+                      <div className="stat-box"><span className="stat-num">{eveningHeads}</span><span className="label-sm">Evening</span><span style={{display:"block",fontSize:9,color:"var(--text-muted)",marginTop:4}}>{evening.length} RSVPs</span></div>
                       <div className="stat-box"><span className="stat-num">{declining.length}</span><span className="label-sm">Declined</span></div>
                     </div>
                     <div className="toggle-row" style={{marginBottom:20}}>
@@ -585,7 +611,7 @@
                         <table className="rsvp-table">
                           <thead>
                             <tr>
-                              <th>Name</th><th>Type</th><th>Coming</th>
+                              <th>Name</th><th>Type</th><th>Coming</th><th>Partner</th>
                               <th>Song</th><th>Dietary</th><th>Message</th>
                             </tr>
                           </thead>
@@ -595,6 +621,7 @@
                                 <td style={{fontWeight:400,whiteSpace:"nowrap"}}>{r.name}</td>
                                 <td><span className={`pill ${r.guest_type === "fullday" ? "pill-full" : "pill-eve"}`}>{r.guest_type === "fullday" ? "Full Day" : "Evening"}</span></td>
                                 <td><span className={`pill ${r.attending ? "pill-yes" : "pill-no"}`}>{r.attending ? "Yes" : "No"}</span></td>
+                                <td style={{color:r.partner_name?"var(--text)":"var(--text-faint)"}}>{r.partner_name||"—"}</td>
                                 <td style={{fontStyle:"italic",color:r.song?"var(--text)":"var(--text-faint)"}}>{r.song||"—"}</td>
                                 <td style={{color:r.dietary?"var(--text)":"var(--text-faint)"}}>{r.dietary||"—"}</td>
                                 <td style={{fontStyle:"italic",color:r.message?"var(--text)":"var(--text-faint)"}}>{r.message||"—"}</td>
