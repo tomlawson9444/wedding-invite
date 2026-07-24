@@ -207,6 +207,7 @@
       const [adminLoading, setAdminLoading] = useState(false);
       const [dbError, setDbError]     = useState("");
       const [checkingCode, setCheckingCode] = useState(false);
+      const [typeFilter, setTypeFilter] = useState("all");
 
       useEffect(() => {
         const t = setTimeout(() => setVisible(true), 80);
@@ -534,6 +535,10 @@
         const declining = rsvps.filter(r => r.attending === false);
         const fullDay   = attending.filter(r => r.guest_type === "fullday");
         const evening   = attending.filter(r => r.guest_type === "evening");
+        const filteredRsvps = typeFilter === "all" ? rsvps : rsvps.filter(r => r.guest_type === typeFilter);
+        const emptyMessage = typeFilter === "fullday" ? "No Full Day guests yet"
+          : typeFilter === "evening" ? "No Evening guests yet"
+          : "No RSVPs received yet";
         return (
           <React.Fragment>
             <style>{css}</style>
@@ -567,9 +572,14 @@
                       <div className="stat-box"><span className="stat-num">{evening.length}</span><span className="label-sm">Evening</span></div>
                       <div className="stat-box"><span className="stat-num">{declining.length}</span><span className="label-sm">Declined</span></div>
                     </div>
+                    <div className="toggle-row" style={{marginBottom:20}}>
+                      <button className={`toggle-btn ${typeFilter === "all" ? "on" : ""}`} onClick={() => setTypeFilter("all")}>All</button>
+                      <button className={`toggle-btn ${typeFilter === "fullday" ? "on" : ""}`} onClick={() => setTypeFilter("fullday")}>Full Day</button>
+                      <button className={`toggle-btn ${typeFilter === "evening" ? "on" : ""}`} onClick={() => setTypeFilter("evening")}>Evening</button>
+                    </div>
                     {dbError && <div className="db-error">{dbError}</div>}
-                    {rsvps.length === 0 ? (
-                      <div className="empty-state">No RSVPs received yet</div>
+                    {filteredRsvps.length === 0 ? (
+                      <div className="empty-state">{emptyMessage}</div>
                     ) : (
                       <div style={{overflowX:"auto"}}>
                         <table className="rsvp-table">
@@ -580,7 +590,7 @@
                             </tr>
                           </thead>
                           <tbody>
-                            {rsvps.map((r, i) => (
+                            {filteredRsvps.map((r, i) => (
                               <tr key={i}>
                                 <td style={{fontWeight:400,whiteSpace:"nowrap"}}>{r.name}</td>
                                 <td><span className={`pill ${r.guest_type === "fullday" ? "pill-full" : "pill-eve"}`}>{r.guest_type === "fullday" ? "Full Day" : "Evening"}</span></td>
