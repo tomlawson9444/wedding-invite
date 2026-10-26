@@ -16,7 +16,7 @@
 <body>
   <div id="root"></div>
   <script type="text/plain" id="app-source">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     const SUPABASE_URL = "https://coazascihbhgjrjxlqwg.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvYXphc2NpaGJoZ2pyanhscXdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MDYwNjksImV4cCI6MjA5NTQ4MjA2OX0.pcvg9scLsnqMA5ctFkkbfF9GzRQeDYT_iuUVrJu_x9s";
@@ -222,18 +222,142 @@
       },
     ];
 
+    const VENUE_LATLNG = [54.8025, -3.1672];
+    const STAY_RADIUS_M = 22000;
+    const STAY_KINDS = {
+      hotel:       { label: "Hotel",           color: "#2e4f63" },
+      motel:       { label: "Hotel",           color: "#2e4f63" },
+      guest_house: { label: "B&B / Guest House", color: "#7d9fb8" },
+      hostel:      { label: "Hostel",          color: "#7d9fb8" },
+      apartment:   { label: "Self-Catering",   color: "#c49a6c" },
+      chalet:      { label: "Self-Catering",   color: "#c49a6c" },
+    };
+    const OVERPASS_URLS = [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter",
+    ];
+
+    let staysCache = null;
+    async function fetchStays() {
+      if (staysCache) return staysCache;
+      const [lat, lng] = VENUE_LATLNG;
+      const query = `[out:json][timeout:25];nwr["tourism"~"^(${Object.keys(STAY_KINDS).join("|")})$"]["name"](around:${STAY_RADIUS_M},${lat},${lng});out center tags;`;
+      for (const url of OVERPASS_URLS) {
+        try {
+          const res = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(query) });
+          if (!res.ok) continue;
+          const { elements } = await res.json();
+          staysCache = elements.map(e => ({
+            name: e.tags.name,
+            kind: e.tags.tourism,
+            town: e.tags["addr:city"] || e.tags["addr:town"] || e.tags["addr:village"] || "",
+            website: e.tags.website || e.tags["contact:website"] || "",
+            lat: e.lat ?? e.center.lat,
+            lng: e.lon ?? e.center.lon,
+          }));
+          return staysCache;
+        } catch (e) { /* try the next mirror */ }
+      }
+      throw new Error("Couldn't load places to stay");
+    }
+
+    const escapeHtml = (str) => String(str).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+    function milesFromVenue(lat, lng) {
+      const rad = d => d * Math.PI / 180;
+      const [vLat, vLng] = VENUE_LATLNG;
+      const a = Math.sin(rad(lat - vLat) / 2) ** 2 + Math.cos(rad(vLat)) * Math.cos(rad(lat)) * Math.sin(rad(lng - vLng) / 2) ** 2;
+      return 3958.8 * 2 * Math.asin(Math.sqrt(a));
+    }
+
+    function bookingUrl(ss) {
+      return `https://www.booking.com/searchresults.en-gb.html?ss=${encodeURIComponent(ss)}&checkin=${STAY_CHECKIN}&checkout=${STAY_CHECKOUT}&group_adults=2&no_rooms=1&group_children=0`;
+    }
+
+    function airbnbAreaUrl(lat, lng) {
+      const d = 0.03;
+      return `https://www.airbnb.co.uk/s/homes?ne_lat=${lat + d}&ne_lng=${lng + d * 1.7}&sw_lat=${lat - d}&sw_lng=${lng - d * 1.7}&zoom=13&search_by_map=true&search_type=user_map_move&checkin=${STAY_CHECKIN}&checkout=${STAY_CHECKOUT}&adults=2`;
+    }
+
+    const popupLink = (href, text) =>
+      `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:6px;padding:7px 8px;border:1px solid #ccdde8;background:#f4f8fa;color:#4a6d84;text-decoration:none;font-family:Jost,sans-serif;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;text-align:center;">${text} →</a>`;
+
+    function stayPopup(stay) {
+      const kind = STAY_KINDS[stay.kind];
+      const miles = milesFromVenue(stay.lat, stay.lng).toFixed(1);
+      return `<div style="min-width:180px;">
+        <b style="font-family:Georgia,serif;color:#2e4f63;font-size:14px;">${escapeHtml(stay.name)}</b><br>
+        <span style="font-size:11px;color:#7a96a6;">${kind.label}${stay.town ? " · " + escapeHtml(stay.town) : ""} · ${miles} mi from venue</span>
+        ${popupLink(bookingUrl(stay.name + (stay.town ? ", " + stay.town : ", Cumbria")), "Check on Booking.com")}
+        ${popupLink(airbnbAreaUrl(stay.lat, stay.lng), "Airbnbs around here")}
+        ${stay.website ? popupLink(stay.website, "Their website") : ""}
+      </div>`;
+    }
+
+    const dotIcon = (color, size) => L.divIcon({
+      html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.35);"></div>`,
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2], className: "",
+    });
+
+    function StayMap() {
+      const ref = useRef(null);
+      const [status, setStatus] = useState("loading");
+      useEffect(() => {
+        const map = L.map(ref.current, { scrollWheelZoom: false }).setView(VENUE_LATLNG, 11);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "© OpenStreetMap contributors"
+        }).addTo(map);
+        L.marker(VENUE_LATLNG, { icon: dotIcon("#b05060", 18), zIndexOffset: 1000 })
+          .addTo(map)
+          .bindPopup(`<b style="font-family:Georgia,serif;color:#2e4f63;">${W.venue}</b><br><span style="font-size:11px;color:#7a96a6;">The wedding venue</span>${popupLink(airbnbAreaUrl(...VENUE_LATLNG), "Airbnbs around the venue")}`);
+        let cancelled = false;
+        fetchStays().then(stays => {
+          if (cancelled) return;
+          stays.forEach(stay => {
+            L.marker([stay.lat, stay.lng], { icon: dotIcon(STAY_KINDS[stay.kind].color, 13) })
+              .addTo(map)
+              .bindPopup(stayPopup(stay));
+          });
+          if (stays.length) map.fitBounds([VENUE_LATLNG, ...stays.map(s => [s.lat, s.lng])], { padding: [20, 20], maxZoom: 12 });
+          setStatus(stays.length ? "ready" : "empty");
+        }).catch(() => !cancelled && setStatus("error"));
+        return () => { cancelled = true; map.remove(); };
+      }, []);
+      const legend = [["#b05060", "Venue"], ["#2e4f63", "Hotel"], ["#7d9fb8", "B&B / Guest House"], ["#c49a6c", "Self-Catering"]];
+      return (
+        <div style={{marginTop:14}}>
+          <div ref={ref} style={{height:"320px",width:"100%",border:"1px solid var(--border-soft)"}}></div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"6px 14px",justifyContent:"center",marginTop:10}}>
+            {legend.map(([color, label]) => (
+              <span key={label} className="detail-note" style={{display:"flex",alignItems:"center",gap:6,margin:0}}>
+                <span style={{width:9,height:9,borderRadius:"50%",background:color,display:"inline-block"}}/>{label}
+              </span>
+            ))}
+          </div>
+          <p className="detail-note" style={{marginTop:8,fontStyle:"italic",textAlign:"center"}}>
+            {status === "loading" && "Finding places to stay nearby…"}
+            {status === "ready" && "Tap a pin to see it on Booking.com or find Airbnbs in that area"}
+            {status === "empty" && "No places found on the map — try the searches below"}
+            {status === "error" && "Couldn't load places on the map right now — try the searches below"}
+          </p>
+        </div>
+      );
+    }
+
     function StayOptions() {
       const [open, setOpen] = useState(false);
       return (
         <div className="detail-block" style={{borderBottom:"none"}}>
           <span className="label-sm">Places to Stay</span>
           <p className="detail-time" style={{fontSize:16,marginTop:4}}>Travelling up for the weekend?</p>
-          <p className="detail-note" style={{marginTop:4}}>Browse hotels and Airbnbs close to the venue for the night of the 23rd</p>
+          <p className="detail-note" style={{marginTop:4}}>See hotels, B&Bs and Airbnbs close to the venue for the night of the 23rd</p>
           <button className="btn btn-ghost" style={{marginTop:14}} onClick={() => setOpen(o => !o)}>
-            {open ? "Hide Accommodation" : "Find Somewhere to Stay"}
+            {open ? "Hide Map" : "Find Somewhere to Stay"}
           </button>
           {open && (
-            <div style={{marginTop:10}}>
+            <div>
+              <StayMap/>
+              <span className="label-sm" style={{display:"block",marginTop:18}}>Or search everything</span>
               {STAY_LINKS.map(l => (
                 <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
                   style={{display:"block",marginTop:8,padding:"12px 14px",border:"1px solid var(--border-soft)",background:"var(--blue-ghost)",textDecoration:"none"}}>
