@@ -196,6 +196,58 @@
       );
     }
 
+    // Night of the wedding; links open each site's search pre-filled for these dates.
+    const STAY_CHECKIN = "2027-10-23";
+    const STAY_CHECKOUT = "2027-10-24";
+    const STAY_LINKS = [
+      {
+        label: "Hotels near the venue · Booking.com",
+        note: "Opens the map view around Wigton",
+        href: `https://www.booking.com/searchresults.en-gb.html?ss=Wigton%2C+Cumbria%2C+United+Kingdom&checkin=${STAY_CHECKIN}&checkout=${STAY_CHECKOUT}&group_adults=2&no_rooms=1&group_children=0#map_opened`,
+      },
+      {
+        label: "Hotels in Carlisle · Booking.com",
+        note: "Handy for the bus from The Halston",
+        href: `https://www.booking.com/searchresults.en-gb.html?ss=Carlisle%2C+Cumbria%2C+United+Kingdom&checkin=${STAY_CHECKIN}&checkout=${STAY_CHECKOUT}&group_adults=2&no_rooms=1&group_children=0#map_opened`,
+      },
+      {
+        label: "Airbnbs nearby",
+        note: "Cottages & homes around Wigton",
+        href: `https://www.airbnb.co.uk/s/Wigton--Cumbria--United-Kingdom/homes?checkin=${STAY_CHECKIN}&checkout=${STAY_CHECKOUT}&adults=2`,
+      },
+      {
+        label: "Hotels on Google Maps",
+        note: "Everything close to Greenhill Hotel",
+        href: "https://www.google.com/maps/search/hotels+near+Greenhill+Hotel,+Red+Dial,+Wigton+CA7+8LS",
+      },
+    ];
+
+    function StayOptions() {
+      const [open, setOpen] = useState(false);
+      return (
+        <div className="detail-block" style={{borderBottom:"none"}}>
+          <span className="label-sm">Places to Stay</span>
+          <p className="detail-time" style={{fontSize:16,marginTop:4}}>Travelling up for the weekend?</p>
+          <p className="detail-note" style={{marginTop:4}}>Browse hotels and Airbnbs close to the venue for the night of the 23rd</p>
+          <button className="btn btn-ghost" style={{marginTop:14}} onClick={() => setOpen(o => !o)}>
+            {open ? "Hide Accommodation" : "Find Somewhere to Stay"}
+          </button>
+          {open && (
+            <div style={{marginTop:10}}>
+              {STAY_LINKS.map(l => (
+                <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
+                  style={{display:"block",marginTop:8,padding:"12px 14px",border:"1px solid var(--border-soft)",background:"var(--blue-ghost)",textDecoration:"none"}}>
+                  <span style={{display:"block",fontFamily:"'Jost',sans-serif",fontSize:"10px",letterSpacing:"0.14em",textTransform:"uppercase",color:"var(--blue-dark)"}}>{l.label} →</span>
+                  <span className="detail-note" style={{display:"block",marginTop:4}}>{l.note}</span>
+                </a>
+              ))}
+              <p className="detail-note" style={{marginTop:10,fontStyle:"italic",textAlign:"center"}}>Dates are pre-filled for 23–24 Oct 2027 — change them on the site if you're staying longer</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function App() {
       const [screen, setScreen]       = useState("login");
       const [guestType, setGuestType] = useState(null);
@@ -429,12 +481,13 @@
                     Open in Google Maps →
                   </a>
                 </div>
-                <div className="detail-block" style={{borderBottom:"none"}}>
+                <div className="detail-block">
                   <span className="label-sm">Bus Transport</span>
                   <p className="detail-time" style={{fontSize:16,marginTop:4}}>{isFull ? "1:15 PM" : "4:30 PM"} from The Halston</p>
                   <p className="detail-note" style={{marginTop:4}}>If you're not driving yourself to the venue</p>
                   <p className="detail-note" style={{marginTop:2}}>The bus to pick you back up will be leaving at midnight</p>
                 </div>
+                <StayOptions/>
                 <div style={{height:30}}/>
                 <button className="btn" onClick={() => go("rsvp")}>RSVP</button>
                 <button className="btn btn-ghost" onClick={() => { setGuestType(null); setCode(""); go("login"); }}>Back to Login</button>
